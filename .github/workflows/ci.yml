@@ -1,0 +1,88 @@
+name: PhishEye CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & Analyze
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.2'
+          channel: 'stable'
+
+      - name: Create .env file
+        run: |
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > .env
+          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
+
+      - name: Download Google Fonts (Space Mono & Rajdhani)
+        run: |
+          mkdir -p assets/fonts
+          # Space Mono Regular
+          curl -sL "https://github.com/google/fonts/raw/main/ofl/spacemono/SpaceMono-Regular.ttf" \
+            -o assets/fonts/SpaceMono-Regular.ttf
+          # Space Mono Bold
+          curl -sL "https://github.com/google/fonts/raw/main/ofl/spacemono/SpaceMono-Bold.ttf" \
+            -o assets/fonts/SpaceMono-Bold.ttf
+          # Rajdhani Regular
+          curl -sL "https://github.com/google/fonts/raw/main/ofl/rajdhani/Rajdhani-Regular.ttf" \
+            -o assets/fonts/Rajdhani-Regular.ttf
+          # Rajdhani Medium
+          curl -sL "https://github.com/google/fonts/raw/main/ofl/rajdhani/Rajdhani-Medium.ttf" \
+            -o assets/fonts/Rajdhani-Medium.ttf
+          # Rajdhani SemiBold
+          curl -sL "https://github.com/google/fonts/raw/main/ofl/rajdhani/Rajdhani-SemiBold.ttf" \
+            -o assets/fonts/Rajdhani-SemiBold.ttf
+          # Rajdhani Bold
+          curl -sL "https://github.com/google/fonts/raw/main/ofl/rajdhani/Rajdhani-Bold.ttf" \
+            -o assets/fonts/Rajdhani-Bold.ttf
+          echo "Fonts downloaded successfully"
+          ls -la assets/fonts/
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze project source
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build APK (debug)
+        run: flutter build apk --debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phisheye-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
+
+      - name: Build App Bundle (release – main branch only)
+        if: github.ref == 'refs/heads/main'
+        run: flutter build appbundle --release
+
+      - name: Upload AAB artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: phisheye-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
